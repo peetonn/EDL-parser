@@ -80,7 +80,7 @@ class NaiveEDLParserAndPublisher(object):
     result = json.loads(urllib.urlopen(queryUrl).read())
     for item in result['items']:
       if 'snippet' in item and 'id' in item:
-        self._videoUrlDict[item['snippet']['title']] = item['id']['videoId']
+        self._videoUrlDict[item['snippet']['title'].lower()] = item['id']['videoId']
       else:
         print("Unexpected JSON from youtube channel query")
     if ('nextPageToken' in result):
@@ -88,6 +88,8 @@ class NaiveEDLParserAndPublisher(object):
     else:
       if __debug__:
         print("Building videoUrl dict finished; number of entries: " + str(len(self._videoUrlDict)))
+        #for item in self._videoUrlDict:
+        #  print(item)
     return
 
   def parse(self, fileName):
@@ -128,7 +130,7 @@ class NaiveEDLParserAndPublisher(object):
               "dst_start_time": "%s", \
               "dst_end_time": "%s", \
               "src_url": "%s" \
-             }' % (str(eventID), reelName, channel, trans, srcStartTime, srcEndTime, dstStartTime, dstEndTime, "stub"))
+             }' % (str(eventID), reelName, channel, trans, srcStartTime, srcEndTime, dstStartTime, dstEndTime, "none"))
           
           isEventBegin = False
           lastEventID = eventID
@@ -138,7 +140,17 @@ class NaiveEDLParserAndPublisher(object):
           fromClipNameMatch = re.match(r'\* FROM CLIP NAME: ([^\n]*)\n', line) 
           if (fromClipNameMatch is not None):
             clipName = fromClipNameMatch.group(1)
-            # TODO: clip name translation
+            parsedClipName = (clipName.lower().replace('_', ' ').replace('-', ' '))
+            # We don't do audio (only .wav) for now
+            if parsedClipName.endswith('.wav'):
+              continue
+            else:
+              parsedClipName = parsedClipName.split('.')[0]
+            if parsedClipName in self._videoUrlDict:
+              # we assume one src_url from one FROM CLIP NAME for now
+              self._events[eventID]['src_url'] = 'https://www.youtube.com/watch?v=' + self._videoUrlDict[parsedClipName]
+            else:
+              print('Warning: file not found in Youtube channel: ' + clipName)
           else:  
             if ('payload' not in self._events[eventID]):
               self._events[eventID]['payload'] = [line]
