@@ -20,14 +20,24 @@ from pyndn.util.common import Common
 from pyndn.util import MemoryContentCache, Blob
 
 try:
-    import asyncio
+  import asyncio
 except ImportError:
-    import trollius as asyncio
+  import trollius as asyncio
+
+try:
+  import urllib2 as urllib
+except ImportError:
+  import urllib.request as urllib
 
 class NaiveEDLParserAndPublisher(object):
   def __init__(self):
+    # prepare trollius logging
     self.prepareLogging()
 
+    self._events = dict()
+    self._running = False
+    
+    # NDN related variables
     self._loop = asyncio.get_event_loop()
     self._face = ThreadsafeFace(self._loop)
     
@@ -37,13 +47,47 @@ class NaiveEDLParserAndPublisher(object):
     self._certificateName = self._keyChain.getDefaultCertificateName()
     self._face.setCommandSigningInfo(self._keyChain, self._certificateName)
     self._memoryContentCache = MemoryContentCache(self._face)
-
-    self._events = dict()
-    self._running = False
-
+    
+    # Publishing parameters configuration
     self._namePrefixString = "/test/edl/"
     self._dataLifetime = 50000
     self._publishBeforeSeconds = 3
+
+    # Youtube related variables: Channel Global Song
+    self._channelID = 'UCSMJaKICZKXkpvr7Gj8pPUg'
+    self._accessKey = 'AIzaSyCe8t7PnmWjMKZ1gBouhP1zARpqNwHAs0s'
+    #queryStr = 'https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics,status&key=' + apiKey + '&id='
+    # Video query example
+    #https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics,status&key=AIzaSyDUY_AX1iJQcwCW1mASEp5GcLtq1V9BM1Q&id=_ebELPKANxo
+    # Channel query example
+    #https://www.googleapis.com/youtube/v3/search?key=AIzaSyCe8t7PnmWjMKZ1gBouhP1zARpqNwHAs0s&channelId=UCSMJaKICZKXkpvr7Gj8pPUg&part=snippet,id&order=date&maxResults=20
+    self._videoUrlDict = dict()
+    return
+  
+  def getClipUrl(self, nextPageToken = None):
+    options = {
+      'part': 'snippet,id',
+      'order': 'date',
+      'maxResults': '20'
+    }
+    if nextPageToken is not None:
+      options['pageToken'] = nextPageToken
+    prefix = 'https://www.googleapis.com/youtube/v3/search?'
+
+    queryUrl = prefix + 'key=' + self._accessKey + '&channelId=' + self._channelID
+    for item in options:
+      queryUrl += '&' + item + '=' + options[item]
+    result = json.loads(urllib.urlopen(queryUrl).read())
+    for item in result['items']:
+      if 'snippet' in item and 'id' in item:
+        self._videoUrlDict[item['snippet']['title']] = item['id']['videoId']
+      else:
+        print("Unexpected JSON from youtube channel query")
+    if ('nextPageToken' in result):
+      self.getClipUrl(result['nextPageToken'])
+    else:
+      if __debug__:
+        print("Building videoUrl dict finished; number of entries: " + str(len(self._videoUrlDict)))
     return
 
   def parse(self, fileName):
@@ -82,8 +126,9 @@ class NaiveEDLParserAndPublisher(object):
               "src_start_time": "%s", \
               "src_end_time": "%s", \
               "dst_start_time": "%s", \
-              "dst_end_time": "%s" \
-             }' % (str(eventID), reelName, channel, trans, srcStartTime, srcEndTime, dstStartTime, dstEndTime))
+              "dst_end_time": "%s", \
+              "src_url": "%s" \
+             }' % (str(eventID), reelName, channel, trans, srcStartTime, srcEndTime, dstStartTime, dstEndTime, "stub"))
           
           isEventBegin = False
           lastEventID = eventID
@@ -120,7 +165,7 @@ class NaiveEDLParserAndPublisher(object):
       print('Added ' + data.getName().toUri())
 
   def getScheduledTime(self, timeStrs):
-    subseconds = int(timeStrs[3])
+    frameNumber = int(timeStrs[3])
     seconds = int(timeStrs[2])
     minutes = int(timeStrs[1])
     hours = int(timeStrs[0])
@@ -166,7 +211,8 @@ class NaiveEDLParserAndPublisher(object):
 if __name__ == '__main__':
 
   naiveEDLParser = NaiveEDLParserAndPublisher()
-  naiveEDLParser.parse('sequence-0-1.edl')
-  naiveEDLParser._loop.run_until_complete(naiveEDLParser.startPublishing())
+  naiveEDLParser.getClipUrl()
+  #naiveEDLParser.parse('sequence-0-1.edl')
+  #naiveEDLParser._loop.run_until_complete(naiveEDLParser.startPublishing())
 
   naiveEDLParser._loop.run_forever()
