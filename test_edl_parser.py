@@ -132,13 +132,18 @@ class NaiveEDLParserAndPublisher(object):
           
           isEventBegin = False
           lastEventID = eventID
-        elif (re.match(r'\s', line) is not None or line == ''):
+        elif (re.match(r'\s+', line) is not None or line == ''):
           isEventBegin = True
         elif lastEventID > 0:
-          if ('payload' not in self._events[eventID]):
-            self._events[eventID]['payload'] = [line]
-          else:
-            self._events[eventID]['payload'].append(line)
+          fromClipNameMatch = re.match(r'\* FROM CLIP NAME: ([^\n]*)\n', line) 
+          if (fromClipNameMatch is not None):
+            clipName = fromClipNameMatch.group(1)
+            # TODO: clip name translation
+          else:  
+            if ('payload' not in self._events[eventID]):
+              self._events[eventID]['payload'] = [line]
+            else:
+              self._events[eventID]['payload'].append(line)
   
   @asyncio.coroutine
   def startPublishing(self):
@@ -212,7 +217,7 @@ if __name__ == '__main__':
 
   naiveEDLParser = NaiveEDLParserAndPublisher()
   naiveEDLParser.getClipUrl()
-  #naiveEDLParser.parse('sequence-0-1.edl')
-  #naiveEDLParser._loop.run_until_complete(naiveEDLParser.startPublishing())
+  naiveEDLParser.parse('sequence-0-1.edl')
+  naiveEDLParser._loop.run_until_complete(naiveEDLParser.startPublishing())
 
   naiveEDLParser._loop.run_forever()
