@@ -79,7 +79,8 @@ class NaiveEDLParserAndPublisher(object):
       queryUrl += '&' + item + '=' + options[item]
     result = json.loads(urllib.urlopen(queryUrl).read())
     for item in result['items']:
-      if 'snippet' in item and 'id' in item:
+      if 'snippet' in item and 'id' in item and 'videoId' in item['id']:
+        print(item['id'])
         self._videoUrlDict[item['snippet']['title'].lower()] = item['id']['videoId']
       else:
         print("Unexpected JSON from youtube channel query")
