@@ -80,7 +80,6 @@ class NaiveEDLParserAndPublisher(object):
     result = json.loads(urllib.urlopen(queryUrl).read())
     for item in result['items']:
       if 'snippet' in item and 'id' in item and 'videoId' in item['id']:
-        print(item['id'])
         self._videoUrlDict[item['snippet']['title'].lower()] = item['id']['videoId']
       else:
         print("Unexpected JSON from youtube channel query")
@@ -111,10 +110,7 @@ class NaiveEDLParserAndPublisher(object):
           channel = components[2]
           trans = components[3]
 
-          timeComponentsIdx = 4
-          if (len(components) > 8):
-            frameCount = components[4]
-            timeComponentsIdx = 5
+          timeComponentsIdx = len(components) - 4
           
           srcStartTime = components[timeComponentsIdx]
           srcEndTime = components[timeComponentsIdx + 1]
@@ -169,6 +165,7 @@ class NaiveEDLParserAndPublisher(object):
       for event_id in sorted(self._events):
         timeStrs = self._events[event_id]['dst_start_time'].split(':')
         remainingTime = self.getScheduledTime(timeStrs)
+
         self._loop.call_later(remainingTime, self.publishData, event_id)
 
       self._running = True
