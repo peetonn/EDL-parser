@@ -154,7 +154,7 @@ class NaiveEDLParserAndPublisher(object):
               self._events[eventID]['payload'] = [line]
             else:
               self._events[eventID]['payload'].append(line)
-  
+
   @asyncio.coroutine
   def startPublishing(self):
     if (len(self._events) == 0):
@@ -163,10 +163,21 @@ class NaiveEDLParserAndPublisher(object):
       self._memoryContentCache.registerPrefix(Name(self._namePrefixString), self.onRegisterFailed, self.onDataNotFound)
       startTime = time.time()
 
+      latestEventTime = 0
       for event_id in sorted(self._events):
         timeStrs = self._events[event_id]['dst_start_time'].split(':')
         remainingTime = self.getScheduledTime(timeStrs)
+        if remainingTime > latestEventTime:
+          latestEventTime = remainingTime
         self._loop.call_later(remainingTime, self.publishData, event_id)
+
+      # append arbitrary 'end' data
+      lastEventID = len(self._events)
+      self._events[lastEventID] = json.loads('{ \
+        "event_id": "%s", \
+        "src_url": "%s" \
+      }' % (str(lastEventID + 1), "end"))
+      self._loop.call_later(latestEventTime + 1, self.publishData, lastEventID)
 
       self._running = True
 

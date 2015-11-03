@@ -3,8 +3,10 @@ EDL parser and NDN publisher
 Temporary namespace:
 
 ```
-/test/edl/<event-id>
+/test/edl/<seq-no>
 ```
+
+Where seq-no is ordered by dst\_start\_time on the publisher.
 
 And payload format:
 
@@ -19,6 +21,15 @@ And payload format:
 	"trans": "C",
 	"channel": "V",
 	"src_start_time": "00:00:59:20"
+}
+```
+
+The last packet has the special format of:
+
+```javascript
+{
+	"event_id": <number_of_event> + 1, 
+	"src_url": "end"
 }
 ```
 
