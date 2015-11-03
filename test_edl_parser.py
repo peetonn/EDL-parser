@@ -52,6 +52,7 @@ class NaiveEDLParserAndPublisher(object):
     self._namePrefixString = "/test/edl/"
     self._dataLifetime = 50000
     self._publishBeforeSeconds = 3
+    self._currentIdx = 0
 
     # Youtube related variables: Channel Global Song
     self._channelID = 'UCSMJaKICZKXkpvr7Gj8pPUg'
@@ -165,17 +166,18 @@ class NaiveEDLParserAndPublisher(object):
       for event_id in sorted(self._events):
         timeStrs = self._events[event_id]['dst_start_time'].split(':')
         remainingTime = self.getScheduledTime(timeStrs)
-
         self._loop.call_later(remainingTime, self.publishData, event_id)
 
       self._running = True
 
   def publishData(self, idx):
-    data = Data(Name(self._namePrefixString + str(idx)))
+    # Order published events sequence numbers by start times in destination
+    data = Data(Name(self._namePrefixString + str(self._currentIdx)))
     data.setContent(json.dumps(self._events[idx]))
     data.getMetaInfo().setFreshnessPeriod(self._dataLifetime)
     self._keyChain.sign(data, self._certificateName)
     self._memoryContentCache.add(data)
+    self._currentIdx += 1
     if __debug__:
       print('Added ' + data.getName().toUri())
 
