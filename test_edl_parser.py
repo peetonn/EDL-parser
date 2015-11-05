@@ -90,7 +90,7 @@ class NaiveEDLParserAndPublisher(object):
       if __debug__:
         print("Building videoUrl dict finished; number of entries: " + str(len(self._videoUrlDict)))
         #for item in self._videoUrlDict:
-        #  print(item)
+        #  print("* " + item)
     return
 
   def parse(self, fileName):
@@ -140,10 +140,11 @@ class NaiveEDLParserAndPublisher(object):
             clipName = fromClipNameMatch.group(1)
             parsedClipName = (clipName.lower().replace('_', ' ').replace('-', ' '))
             # We don't do audio (only .wav) for now
-            if parsedClipName.endswith('.wav'):
+            if parsedClipName.endswith('.wav') or parsedClipName.endswith('.mp3'):
               continue
             else:
-              parsedClipName = parsedClipName.split('.')[0]
+              parsedClipName = (" ").join(parsedClipName.split('.')[:-1])
+              #print(parsedClipName)
             if parsedClipName in self._videoUrlDict:
               # we assume one src_url from one FROM CLIP NAME for now
               self._events[eventID]['src_url'] = 'https://www.youtube.com/watch?v=' + self._videoUrlDict[parsedClipName]
