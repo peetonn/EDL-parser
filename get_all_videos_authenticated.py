@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# Code taken from Google's Python API example of getting videos in my channel
 
 import httplib2
 import os
@@ -49,51 +50,61 @@ YOUTUBE_API_VERSION = "v3"
 # For testing if the OAuth redirect url is set up correctly:
 #  https://accounts.google.com/AccountChooser?continue=https%3A%2F%2Faccounts.google.com%2Fo%2Foauth2%2Fauth%3Faccess_type%3Doffline%26scope%3Dhttps%3A%2F%2Fwww.googleapis.com%2Fauth%2Fanalytics.readonly%26response_type%3Dcode%26redirect_uri%3Dhttp%3A%2F%2Flocalhost%3A8080%2F%26client_id%3D402991078443-m4viuofsqb1s61e05bbvi8ejbja46fvj.apps.googleusercontent.com%26hl%3Dzh-CN%26from_login%3D1%26as%3D-2510b106115fceb7&btmpl=authsub&hl=zh_CN
 
-flow = flow_from_clientsecrets(CLIENT_SECRETS_FILE,
-  message=MISSING_CLIENT_SECRETS_MESSAGE,
-  scope=YOUTUBE_READONLY_SCOPE)
+def getAllVideosFromChannel():
+  flow = flow_from_clientsecrets(CLIENT_SECRETS_FILE,
+    message=MISSING_CLIENT_SECRETS_MESSAGE,
+    scope=YOUTUBE_READONLY_SCOPE)
 
-storage = Storage("%s-oauth2.json" % sys.argv[0])
-credentials = storage.get()
+  storage = Storage("%s-oauth2.json" % sys.argv[0])
+  credentials = storage.get()
 
-if credentials is None or credentials.invalid:
-  flags = argparser.parse_args()
-  credentials = run_flow(flow, storage, flags)
+  if credentials is None or credentials.invalid:
+    flags = argparser.parse_args()
+    credentials = run_flow(flow, storage, flags)
 
-youtube = build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION,
-  http=credentials.authorize(httplib2.Http()))
+  youtube = build(YOUTUBE_API_SERVICE_NAME, YOUTUBE_API_VERSION,
+    http=credentials.authorize(httplib2.Http()))
 
-# Retrieve the contentDetails part of the channel resource for the
-# authenticated user's channel.
-channels_response = youtube.channels().list(
-  mine=True,
-  part="contentDetails"
-).execute()
+  # Retrieve the contentDetails part of the channel resource for the
+  # authenticated user's channel.
+  channels_response = youtube.channels().list(
+    mine=True,
+    part="contentDetails"
+  ).execute()
 
-for channel in channels_response["items"]:
-  # From the API response, extract the playlist ID that identifies the list
-  # of videos uploaded to the authenticated user's channel.
-  uploads_list_id = channel["contentDetails"]["relatedPlaylists"]["uploads"]
+  for channel in channels_response["items"]:
+    # From the API response, extract the playlist ID that identifies the list
+    # of videos uploaded to the authenticated user's channel.
+    uploads_list_id = channel["contentDetails"]["relatedPlaylists"]["uploads"]
 
-  print "Videos in list %s" % uploads_list_id
+    print "Videos in list %s" % uploads_list_id
 
-  # Retrieve the list of videos uploaded to the authenticated user's channel.
-  playlistitems_list_request = youtube.playlistItems().list(
-    playlistId=uploads_list_id,
-    part="snippet",
-    maxResults=50
-  )
+    # Retrieve the list of videos uploaded to the authenticated user's channel.
+    playlistitems_list_request = youtube.playlistItems().list(
+      playlistId=uploads_list_id,
+      part="snippet",
+      maxResults=50
+    )
+    
+    result = dict()
 
-  while playlistitems_list_request:
-    playlistitems_list_response = playlistitems_list_request.execute()
+    while playlistitems_list_request:
+      playlistitems_list_response = playlistitems_list_request.execute()
 
-    # Print information about each video.
-    for playlist_item in playlistitems_list_response["items"]:
-      title = playlist_item["snippet"]["title"]
-      video_id = playlist_item["snippet"]["resourceId"]["videoId"]
-      print "%s (%s)" % (title, video_id)
+      # Print information about each video.
+      for playlist_item in playlistitems_list_response["items"]:
+        title = playlist_item["snippet"]["title"]
+        video_id = playlist_item["snippet"]["resourceId"]["videoId"]
+        if __debug__:
+          print "%s (%s)" % (title, video_id)
+        result[title] = video_id
 
-    playlistitems_list_request = youtube.playlistItems().list_next(
-      playlistitems_list_request, playlistitems_list_response)
+      playlistitems_list_request = youtube.playlistItems().list_next(
+        playlistitems_list_request, playlistitems_list_response)
 
-  print
+    if __debug__:
+      print
+    return result
+
+if __name__ == '__main__':
+  print(getAllVideosFromChannel())

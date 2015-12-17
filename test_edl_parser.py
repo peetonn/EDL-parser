@@ -19,6 +19,8 @@ from pyndn.security.policy.config_policy_manager import ConfigPolicyManager
 from pyndn.util.common import Common
 from pyndn.util import MemoryContentCache, Blob
 
+from get_all_videos_authenticated import getAllVideosFromChannel
+
 try:
   import asyncio
 except ImportError:
@@ -238,7 +240,6 @@ class NaiveEDLParserAndPublisher(object):
 
 
 if __name__ == '__main__':
-
   naiveEDLParser = NaiveEDLParserAndPublisher()
   naiveEDLParser.getClipUrl()
   naiveEDLParser.parse('sequence-0-1.edl')
