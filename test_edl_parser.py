@@ -19,7 +19,7 @@ from pyndn.security.policy.config_policy_manager import ConfigPolicyManager
 from pyndn.util.common import Common
 from pyndn.util import MemoryContentCache, Blob
 
-from get_all_videos_authenticated import getAllVideosFromChannel
+#from get_all_videos_authenticated import getAllVideosFromChannel
 
 try:
   import asyncio
@@ -30,6 +30,9 @@ try:
   import urllib2 as urllib
 except ImportError:
   import urllib.request as urllib
+
+# Modification for Python 3
+import urllib as urllibparse
 
 class NaiveEDLParserAndPublisher(object):
   def __init__(self):
@@ -52,11 +55,15 @@ class NaiveEDLParserAndPublisher(object):
     
     # Publishing parameters configuration
     self._namePrefixString = "/test/edl/"
+    self._translationServiceUrl = "http://the-archive.la/losangeles/services/get-youtube-url"
     self._dataLifetime = 50000
     self._publishBeforeSeconds = 3
+    self._translateBeforeSeconds = 60
     self._currentIdx = 0
 
-    # Youtube related variables: Channel Global Song
+    # Youtube related variables: 
+    # Channel Global song: UCSMJaKICZKXkpvr7Gj8pPUg
+    # Channel Los Angeles: UCeuQoBBzMW6SWkxd8_1I8NQ
     self._channelID = 'UCSMJaKICZKXkpvr7Gj8pPUg'
     self._accessKey = 'AIzaSyCe8t7PnmWjMKZ1gBouhP1zARpqNwHAs0s'
     #queryStr = 'https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics,status&key=' + apiKey + '&id='
@@ -129,8 +136,9 @@ class NaiveEDLParserAndPublisher(object):
               "src_end_time": "%s", \
               "dst_start_time": "%s", \
               "dst_end_time": "%s", \
-              "src_url": "%s" \
-             }' % (str(eventID), reelName, channel, trans, srcStartTime, srcEndTime, dstStartTime, dstEndTime, "none"))
+              "src_url": "%s", \
+              "translated": "%s" \
+             }' % (str(eventID), reelName, channel, trans, srcStartTime, srcEndTime, dstStartTime, dstEndTime, "none", "none"))
           
           isEventBegin = False
           lastEventID = eventID
@@ -169,10 +177,12 @@ class NaiveEDLParserAndPublisher(object):
       latestEventTime = 0
       for event_id in sorted(self._events):
         timeStrs = self._events[event_id]['dst_start_time'].split(':')
-        remainingTime = self.getScheduledTime(timeStrs)
-        if remainingTime > latestEventTime:
-          latestEventTime = remainingTime
-        self._loop.call_later(remainingTime, self.publishData, event_id)
+        publishingTime = self.getScheduledTime(timeStrs, self._publishBeforeSeconds)
+        translationTime = self.getScheduledTime(timeStrs, self._translateBeforeSeconds)
+        if publishingTime > latestEventTime:
+          latestEventTime = publishingTime
+        self._loop.call_later(translationTime, self.translateUrl, event_id)
+        self._loop.call_later(publishingTime, self.publishData, event_id)
 
       # append arbitrary 'end' data
       lastEventID = len(self._events)
@@ -184,23 +194,67 @@ class NaiveEDLParserAndPublisher(object):
 
       self._running = True
 
-  def publishData(self, idx):
-    # Order published events sequence numbers by start times in destination
-    data = Data(Name(self._namePrefixString + str(self._currentIdx)))
-    data.setContent(json.dumps(self._events[idx]))
-    data.getMetaInfo().setFreshnessPeriod(self._dataLifetime)
-    self._keyChain.sign(data, self._certificateName)
-    self._memoryContentCache.add(data)
-    self._currentIdx += 1
-    if __debug__:
-      print('Added ' + data.getName().toUri())
+  def translateUrl(self, idx):
+    queryUrl = self._translationServiceUrl
+    timeStrs = self._events[idx]['src_start_time'].split(':')
+    
+    # we don't have the video from Youtube
+    if self._events[idx]['src_url'] == "none":
+      # we still publish the data even if src_url is "none", to maintain consecutive sequence numbers
+      self._events[idx]['translated'] = "non-existent"
+      return
 
-  def getScheduledTime(self, timeStrs):
+    serviceUrl = self._events[idx]['src_url'] + "&t=" + str(self.timeToSeconds(timeStrs)) + "s"
+
+    values = {'url' : serviceUrl,
+              'fetchIfNotExist' : 'true' }
+
+    data = urllibparse.urlencode(values)
+    req = urllib.Request(queryUrl, data)
+    # This synchronous request might block the execution of publishData; should be changed later
+    response = urllib.urlopen(req)
+    videoUrl = response.read()
+
+    self._events[idx]['ori_url'] = serviceUrl
+    self._events[idx]['src_url'] = videoUrl
+
+    if self._events[idx]['translated'] == "publish":
+      # We already missed the scheduled publishing time; should publish as soon as translation finishes
+      self.publishData(idx)
+    else:
+      self._events[idx]['translated'] = "translated"
+    return
+
+  def publishData(self, idx):
+    # Translation of the video URL has finished by the time of the publishData call; 
+    # if not, we set translated to "publish"; this is data race free since translateUrl and publishData are scheduled in the same thread
+    if self._events[idx]['translated'] != "none":
+      # Order published events sequence numbers by start times in destination
+      data = Data(Name(self._namePrefixString + str(self._currentIdx)))
+
+      data.setContent(json.dumps(self._events[idx]))
+      data.getMetaInfo().setFreshnessPeriod(self._dataLifetime)
+      self._keyChain.sign(data, self._certificateName)
+      self._memoryContentCache.add(data)
+      self._currentIdx += 1
+      if __debug__:
+        print('Added ' + data.getName().toUri())
+    else:
+      self._events[idx]['translated'] = "publish"
+
+  def timeToSeconds(self, timeStrs):
+    seconds = int(timeStrs[2])
+    minutes = int(timeStrs[1])
+    hours = int(timeStrs[0])
+    ret = hours * 3600 + minutes * 60 + seconds
+    return ret
+
+  def getScheduledTime(self, timeStrs, beforeSeconds):
     frameNumber = int(timeStrs[3])
     seconds = int(timeStrs[2])
     minutes = int(timeStrs[1])
     hours = int(timeStrs[0])
-    ret = hours * 3600 + minutes * 60 + seconds - self._publishBeforeSeconds
+    ret = hours * 3600 + minutes * 60 + seconds - beforeSeconds
     return (0 if ret < 0 else ret)
 
   def onRegisterFailed(self, prefix):
