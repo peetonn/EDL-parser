@@ -175,21 +175,25 @@ class NaiveEDLParserAndPublisher(object):
       startTime = time.time()
 
       latestEventTime = 0
+      lastEventID = 0
       for event_id in sorted(self._events):
         timeStrs = self._events[event_id]['dst_start_time'].split(':')
         publishingTime = self.getScheduledTime(timeStrs, self._publishBeforeSeconds)
         translationTime = self.getScheduledTime(timeStrs, self._translateBeforeSeconds)
         if publishingTime > latestEventTime:
           latestEventTime = publishingTime
+        print("scheduled for " + str(event_id))
         self._loop.call_later(translationTime, self.translateUrl, event_id)
         self._loop.call_later(publishingTime, self.publishData, event_id)
+        lastEventID = event_id
 
       # append arbitrary 'end' data
-      lastEventID = len(self._events)
+      lastEventID = lastEventID + 1
       self._events[lastEventID] = json.loads('{ \
         "event_id": "%s", \
-        "src_url": "%s" \
-      }' % (str(lastEventID + 1), "end"))
+        "src_url": "%s", \
+        "translated": "%s" \
+      }' % (str(lastEventID), "end", "not-required"))
       self._loop.call_later(latestEventTime + 1, self.publishData, lastEventID)
 
       self._running = True
@@ -238,7 +242,7 @@ class NaiveEDLParserAndPublisher(object):
       self._memoryContentCache.add(data)
       self._currentIdx += 1
       if __debug__:
-        print('Added ' + data.getName().toUri())
+        print('Added ' + data.getName().toUri())      
     else:
       self._events[idx]['translated'] = "publish"
 
