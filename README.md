@@ -33,4 +33,9 @@ The last packet has the special format of:
 }
 ```
 
+Dependency:
+* PyNDN
+* (If using OAuth fetching) Google Python API: pip install --upgrade google-api-python-client
+* (If using OAuth fetching) oauth2client: pip install --upgrade oauth2client
+
 Zhehao <zhehao@remap.ucla.edu>
