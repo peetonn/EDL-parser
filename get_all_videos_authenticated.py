@@ -79,7 +79,8 @@ def getAllVideosFromChannel():
     # of videos uploaded to the authenticated user's channel.
     uploads_list_id = channel["contentDetails"]["relatedPlaylists"]["uploads"]
 
-    print "Videos in list %s" % uploads_list_id
+    if __debug__:
+      print "Videos in list %s" % uploads_list_id
 
     # Retrieve the list of videos uploaded to the authenticated user's channel.
     playlistitems_list_request = youtube.playlistItems().list(

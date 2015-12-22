@@ -19,7 +19,7 @@ from pyndn.security.policy.config_policy_manager import ConfigPolicyManager
 from pyndn.util.common import Common
 from pyndn.util import MemoryContentCache, Blob
 
-#from get_all_videos_authenticated import getAllVideosFromChannel
+from get_all_videos_authenticated import getAllVideosFromChannel
 
 try:
   import asyncio
@@ -74,6 +74,10 @@ class NaiveEDLParserAndPublisher(object):
     self._videoUrlDict = dict()
     return
   
+  def getClipUrlOAuth(self):
+    self._videoUrlDict = dict((k.lower(), v) for k,v in getAllVideosFromChannel().iteritems())
+  
+  # Old getClipUrl function that looks at the public Youtube channel without using Python API
   def getClipUrl(self, nextPageToken = None):
     options = {
       'part': 'snippet,id',
@@ -149,12 +153,12 @@ class NaiveEDLParserAndPublisher(object):
           if (fromClipNameMatch is not None):
             clipName = fromClipNameMatch.group(1)
             parsedClipName = (clipName.lower().replace('_', ' ').replace('-', ' '))
-            # We don't do audio (only .wav) for now
+            # We don't do audio (only .wav or .mp3) for now
             if parsedClipName.endswith('.wav') or parsedClipName.endswith('.mp3'):
               continue
             else:
               parsedClipName = (" ").join(parsedClipName.split('.')[:-1])
-              #print(parsedClipName)
+              print(parsedClipName)
             if parsedClipName in self._videoUrlDict:
               # we assume one src_url from one FROM CLIP NAME for now
               self._events[eventID]['src_url'] = 'https://www.youtube.com/watch?v=' + self._videoUrlDict[parsedClipName]
@@ -182,7 +186,6 @@ class NaiveEDLParserAndPublisher(object):
         translationTime = self.getScheduledTime(timeStrs, self._translateBeforeSeconds)
         if publishingTime > latestEventTime:
           latestEventTime = publishingTime
-        print("scheduled for " + str(event_id))
         self._loop.call_later(translationTime, self.translateUrl, event_id)
         self._loop.call_later(publishingTime, self.publishData, event_id)
         lastEventID = event_id
@@ -299,8 +302,8 @@ class NaiveEDLParserAndPublisher(object):
 
 if __name__ == '__main__':
   naiveEDLParser = NaiveEDLParserAndPublisher()
-  naiveEDLParser.getClipUrl()
-  naiveEDLParser.parse('sequence-0-1.edl')
+  naiveEDLParser.getClipUrlOAuth()
+  naiveEDLParser.parse('ROUGH CUT_v02_ZS.edl')
   naiveEDLParser._loop.run_until_complete(naiveEDLParser.startPublishing())
 
   naiveEDLParser._loop.run_forever()
