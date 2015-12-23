@@ -158,7 +158,7 @@ class NaiveEDLParserAndPublisher(object):
               continue
             else:
               parsedClipName = (" ").join(parsedClipName.split('.')[:-1])
-              print(parsedClipName)
+              # print(parsedClipName)
             if parsedClipName in self._videoUrlDict:
               # we assume one src_url from one FROM CLIP NAME for now
               self._events[eventID]['src_url'] = 'https://www.youtube.com/watch?v=' + self._videoUrlDict[parsedClipName]
