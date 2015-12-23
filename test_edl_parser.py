@@ -1,5 +1,6 @@
 import re
 import json
+import csv
 
 import time
 import getopt
@@ -35,12 +36,13 @@ except ImportError:
 import urllib as urllibparse
 
 class NaiveEDLParserAndPublisher(object):
-  def __init__(self):
+  def __init__(self, applyEDLAdjustment = True):
     # prepare trollius logging
     self.prepareLogging()
 
     self._events = dict()
     self._running = False
+    self._applyEDLAdjustment = applyEDLAdjustment
     
     # NDN related variables
     self._loop = asyncio.get_event_loop()
@@ -72,6 +74,8 @@ class NaiveEDLParserAndPublisher(object):
     # Channel query example
     #https://www.googleapis.com/youtube/v3/search?key=AIzaSyCe8t7PnmWjMKZ1gBouhP1zARpqNwHAs0s&channelId=UCSMJaKICZKXkpvr7Gj8pPUg&part=snippet,id&order=date&maxResults=20
     self._videoUrlDict = dict()
+    
+    self._edlAdjustmentDict = dict()
     return
   
   def getClipUrlOAuth(self):
@@ -149,16 +153,39 @@ class NaiveEDLParserAndPublisher(object):
         elif (re.match(r'\s+', line) is not None or line == ''):
           isEventBegin = True
         elif lastEventID > 0:
+          # Skipping events that do not have right offset
+          if not eventID in self._events:
+            print('Line skipped because of missing start time adjustment')
+            continue
+
           fromClipNameMatch = re.match(r'\* FROM CLIP NAME: ([^\n]*)\n', line) 
           if (fromClipNameMatch is not None):
-            clipName = fromClipNameMatch.group(1)
+            clipName = fromClipNameMatch.group(1).strip()
             parsedClipName = (clipName.lower().replace('_', ' ').replace('-', ' '))
+
+            if self._applyEDLAdjustment:
+              if clipName in self._edlAdjustmentDict:
+                startTimeAdjusted = self.getTimeMinus(self._edlAdjustmentDict[clipName].split(':'), self._events[eventID]['src_start_time'].split(':'))
+                endTimeAdjusted = self.getTimeMinus(self._edlAdjustmentDict[clipName].split(':'), self._events[eventID]['src_end_time'].split(':'))
+                
+                # Skipping events that do not have right offset
+                if startTimeAdjusted == "" or endTimeAdjusted == "":
+                  print(clipName + " : " + startTimeAdjusted, " start time incorrect; event " + str(eventID) + " ignored")
+                  del self._events[eventID]
+                  continue
+              else:
+                # Skipping events that do not have right offset
+                print('Warning: EDL adjustment not found for ' + clipName + "; event " + str(eventID) + " ignored")
+                del self._events[eventID]
+                continue
+
             # We don't do audio (only .wav or .mp3) for now
             if parsedClipName.endswith('.wav') or parsedClipName.endswith('.mp3'):
               continue
             else:
               parsedClipName = (" ").join(parsedClipName.split('.')[:-1])
               # print(parsedClipName)
+
             if parsedClipName in self._videoUrlDict:
               # we assume one src_url from one FROM CLIP NAME for now
               self._events[eventID]['src_url'] = 'https://www.youtube.com/watch?v=' + self._videoUrlDict[parsedClipName]
@@ -256,6 +283,40 @@ class NaiveEDLParserAndPublisher(object):
     ret = hours * 3600 + minutes * 60 + seconds
     return ret
 
+  def getTimeMinus(self, timeStrs1, timeStrs2):
+    frameNumber = int(timeStrs1[3])
+    seconds = int(timeStrs1[2])
+    minutes = int(timeStrs1[1])
+    hours = int(timeStrs1[0])
+
+    frameNumber2 = int(timeStrs2[3]) - frameNumber
+    seconds2 = int(timeStrs2[2]) - seconds
+    minutes2 = int(timeStrs2[1]) - minutes
+    hours2 = int(timeStrs2[0]) - hours
+
+    if frameNumber2 < 0:
+      # frame rate assumption
+      frameNumber2 = 30 + frameNumber2
+      seconds2 = seconds2 - 1
+
+    if seconds2 < 0:
+      seconds2 = 60 + seconds2
+      minutes2 = minutes2 - 1
+
+    if minutes2 < 0:
+      minutes2 = 60 + minutes2
+      hours2 = hours2 - 1
+
+    if hours2 < 0:
+      print("Warning: time minus smaller than 0")
+      return ""
+    
+    # Arbitrary guard of start times that are off
+    if hours2 > 1 or minutes2 > 1:
+      return ""
+
+    return ":".join([str(hours2), str(minutes2), str(seconds2), str(frameNumber2)]) 
+
   def getScheduledTime(self, timeStrs, beforeSeconds):
     frameNumber = int(timeStrs[3])
     seconds = int(timeStrs[2])
@@ -271,37 +332,45 @@ class NaiveEDLParserAndPublisher(object):
     print('Data not found for interest: ' + interest.getName().toUri())
     return
 
-#############################
-# Logging
-#############################
+  #############################
+  # Logging
+  #############################
   def prepareLogging(self):
-      self.log = logging.getLogger(str(self.__class__))
-      self.log.setLevel(logging.DEBUG)
-      logFormat = "%(asctime)-15s %(name)-20s %(funcName)-20s (%(levelname)-8s):\n\t%(message)s"
-      self._console = logging.StreamHandler()
-      self._console.setFormatter(logging.Formatter(logFormat))
-      self._console.setLevel(logging.INFO)
-      # without this, a lot of ThreadsafeFace errors get swallowed up
-      logging.getLogger("trollius").addHandler(self._console)
-      self.log.addHandler(self._console)
+    self.log = logging.getLogger(str(self.__class__))
+    self.log.setLevel(logging.DEBUG)
+    logFormat = "%(asctime)-15s %(name)-20s %(funcName)-20s (%(levelname)-8s):\n\t%(message)s"
+    self._console = logging.StreamHandler()
+    self._console.setFormatter(logging.Formatter(logFormat))
+    self._console.setLevel(logging.INFO)
+    # without this, a lot of ThreadsafeFace errors get swallowed up
+    logging.getLogger("trollius").addHandler(self._console)
+    self.log.addHandler(self._console)
 
   def setLogLevel(self, level):
-      """
-      Set the log level that will be output to standard error
-      :param level: A log level constant defined in the logging module (e.g. logging.INFO) 
-      """
-      self._console.setLevel(level)
+    """
+    Set the log level that will be output to standard error
+    :param level: A log level constant defined in the logging module (e.g. logging.INFO) 
+    """
+    self._console.setLevel(level)
 
   def getLogger(self):
-      """
-      :return: The logger associated with this node
-      :rtype: logging.Logger
-      """
-      return self.log
+    """
+    :return: The logger associated with this node
+    :rtype: logging.Logger
+    """
+    return self.log
 
+  ############################
+  def loadEDLAdjustment(self, csvFile):
+    with open(csvFile, "rb") as csvfile:
+      reader = csv.reader(csvfile, delimiter=',', quotechar='|')
+      for row in reader:
+        self._edlAdjustmentDict[row[3]] = row[1]
 
 if __name__ == '__main__':
   naiveEDLParser = NaiveEDLParserAndPublisher()
+  if naiveEDLParser._applyEDLAdjustment:
+    naiveEDLParser.loadEDLAdjustment('rough-cut.csv')
   naiveEDLParser.getClipUrlOAuth()
   naiveEDLParser.parse('ROUGH CUT_v02_ZS.edl')
   naiveEDLParser._loop.run_until_complete(naiveEDLParser.startPublishing())
