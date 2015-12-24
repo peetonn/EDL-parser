@@ -167,7 +167,9 @@ class NaiveEDLParserAndPublisher(object):
               if clipName in self._edlAdjustmentDict:
                 startTimeAdjusted = self.getTimeMinus(self._edlAdjustmentDict[clipName].split(':'), self._events[eventID]['src_start_time'].split(':'))
                 endTimeAdjusted = self.getTimeMinus(self._edlAdjustmentDict[clipName].split(':'), self._events[eventID]['src_end_time'].split(':'))
-                
+                self._events[eventID]['src_start_time'] = startTimeAdjusted
+                self._events[eventID]['src_end_time'] = endTimeAdjusted
+
                 # Skipping events that do not have right offset
                 if startTimeAdjusted == "" or endTimeAdjusted == "":
                   print(clipName + " : " + startTimeAdjusted, " start time incorrect; event " + str(eventID) + " ignored")
