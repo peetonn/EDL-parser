@@ -55,10 +55,11 @@ class NaiveEDLParserAndPublisher(object):
     self._face.setCommandSigningInfo(self._keyChain, self._certificateName)
     self._memoryContentCache = MemoryContentCache(self._face)
     
-    # Publishing parameters configuration
-    self._namePrefixString = "/test/edl/"
+    # Publishing parameters conf  iguration
     self._translationServiceUrl = "http://the-archive.la/losangeles/services/get-youtube-url"
-    self._dataLifetime = 50000
+    self._namePrefixString = "/ndn/edu/ucla/remap/test/edl/"
+
+    self._dataLifetime = 2000
     self._publishBeforeSeconds = 3
     self._translateBeforeSeconds = 60
     self._currentIdx = 0
@@ -66,6 +67,7 @@ class NaiveEDLParserAndPublisher(object):
     # Youtube related variables: 
     # Channel Global song: UCSMJaKICZKXkpvr7Gj8pPUg
     # Channel Los Angeles: UCeuQoBBzMW6SWkxd8_1I8NQ
+    # self._channelID = 'UCSMJaKICZKXkpvr7Gj8pPUg'
     self._channelID = 'UCSMJaKICZKXkpvr7Gj8pPUg'
     self._accessKey = 'AIzaSyCe8t7PnmWjMKZ1gBouhP1zARpqNwHAs0s'
     #queryStr = 'https://www.googleapis.com/youtube/v3/videos?part=snippet,contentDetails,statistics,status&key=' + apiKey + '&id='
@@ -191,6 +193,7 @@ class NaiveEDLParserAndPublisher(object):
             if parsedClipName in self._videoUrlDict:
               # we assume one src_url from one FROM CLIP NAME for now
               self._events[eventID]['src_url'] = 'https://www.youtube.com/watch?v=' + self._videoUrlDict[parsedClipName]
+              print('src_url is '+self._events[eventID]['src_url'])
             else:
               print('Warning: file not found in Youtube channel: ' + clipName)
           else:  
@@ -226,7 +229,11 @@ class NaiveEDLParserAndPublisher(object):
         "src_url": "%s", \
         "translated": "%s" \
       }' % (str(lastEventID), "end", "not-required"))
+      startTime = self.getScheduledTime(self._events[lastEventID-1]['src_start_time'].split(':'),0)
+      endTime = self.getScheduledTime(self._events[lastEventID-1]['src_end_time'].split(':'),0)
+      print('scheduled end '+str(endTime-startTime)+' sec from now')
       self._loop.call_later(latestEventTime + 1, self.publishData, lastEventID)
+      self._loop.call_later(latestEventTime + 2 + (endTime-startTime), self._loop.stop)
 
       self._running = True
 
@@ -236,11 +243,12 @@ class NaiveEDLParserAndPublisher(object):
     
     # we don't have the video from Youtube
     if self._events[idx]['src_url'] == "none":
+      print("no video from Youtube")
       # we still publish the data even if src_url is "none", to maintain consecutive sequence numbers
       self._events[idx]['translated'] = "non-existent"
       return
 
-    serviceUrl = self._events[idx]['src_url'] + "&t=" + str(self.timeToSeconds(timeStrs)) + "s"
+    serviceUrl = self._events[idx]['src_url'] #+ "&t=" + str(self.timeToSeconds(timeStrs)) + "s"
 
     values = {'url' : serviceUrl,
               'fetchIfNotExist' : 'true' }
@@ -274,7 +282,7 @@ class NaiveEDLParserAndPublisher(object):
       self._memoryContentCache.add(data)
       self._currentIdx += 1
       if __debug__:
-        print('Added ' + data.getName().toUri())      
+        print('Added ' + data.getName().toUri())
     else:
       self._events[idx]['translated'] = "publish"
 
@@ -371,10 +379,19 @@ class NaiveEDLParserAndPublisher(object):
 
 if __name__ == '__main__':
   naiveEDLParser = NaiveEDLParserAndPublisher()
+# <<<<<<< Updated upstream
   if naiveEDLParser._applyEDLAdjustment:
     naiveEDLParser.loadEDLAdjustment('rough-cut.csv')
   naiveEDLParser.getClipUrlOAuth()
   naiveEDLParser.parse('ROUGH CUT_v02_ZS.edl')
+# =======
+  # if 0:
+  #   naiveEDLParser.getClipUrlOAuth()
+  #   naiveEDLParser.parse('ROUGH CUT_v02_ZS.edl')
+  # else:
+  #   naiveEDLParser.getClipUrl()
+  #   naiveEDLParser.parse('sequence-0-1.edl')
+# >>>>>>> Stashed changes
   naiveEDLParser._loop.run_until_complete(naiveEDLParser.startPublishing())
 
   naiveEDLParser._loop.run_forever()
