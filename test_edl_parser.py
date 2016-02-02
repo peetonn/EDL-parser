@@ -147,8 +147,10 @@ class NaiveEDLParserAndPublisher(object):
               "dst_start_time": "%s", \
               "dst_end_time": "%s", \
               "src_url": "%s", \
-              "translated": "%s" \
-             }' % (str(eventID), reelName, channel, trans, srcStartTime, srcEndTime, dstStartTime, dstEndTime, "none", "none"))
+              "translated": "%s", \
+              "clipName": "%s", \
+              "ytPresent": "%s" \
+             }' % (str(eventID), reelName, channel, trans, srcStartTime, srcEndTime, dstStartTime, dstEndTime, "none", "none", "n/a", "n/a"))
           
           isEventBegin = False
           lastEventID = eventID
@@ -183,18 +185,20 @@ class NaiveEDLParserAndPublisher(object):
                 del self._events[eventID]
                 continue
 
+            self._events[eventID]['clipName'] = parsedClipName
             # We don't do audio (only .wav or .mp3) for now
             if parsedClipName.endswith('.wav') or parsedClipName.endswith('.mp3'):
               continue
             else:
               parsedClipName = (" ").join(parsedClipName.split('.')[:-1])
               # print(parsedClipName)
-
             if parsedClipName in self._videoUrlDict:
               # we assume one src_url from one FROM CLIP NAME for now
               self._events[eventID]['src_url'] = 'https://www.youtube.com/watch?v=' + self._videoUrlDict[parsedClipName]
+              self._events[eventID]['ytPresent'] = "YES"
               print('src_url is '+self._events[eventID]['src_url'])
             else:
+              self._events[eventID]['ytPresent'] = "NO"
               print('Warning: file not found in Youtube channel: ' + clipName)
           else:  
             if ('payload' not in self._events[eventID]):
@@ -243,7 +247,7 @@ class NaiveEDLParserAndPublisher(object):
     
     # we don't have the video from Youtube
     if self._events[idx]['src_url'] == "none":
-      print("no video from Youtube")
+      #print("no video from Youtube")
       # we still publish the data even if src_url is "none", to maintain consecutive sequence numbers
       self._events[idx]['translated'] = "non-existent"
       return
@@ -282,7 +286,14 @@ class NaiveEDLParserAndPublisher(object):
       self._memoryContentCache.add(data)
       self._currentIdx += 1
       if __debug__:
-        print('Added ' + data.getName().toUri())
+        eventId = str(self._events[idx]['event_id'])
+        channel = str(self._events[idx]['channel'])
+        srcUrl = str(self._events[idx]['src_url'])
+        clipName = str(self._events[idx]['clipName'])
+        ytPresent = str(self._events[idx]['ytPresent'])
+        clipStartTime = str(self._events[idx]['dst_start_time'])
+        clipEndTime = str(self._events[idx]['dst_end_time'])
+        print(str(time.time())+' Added event [' + eventId + '-' + channel + '|' + clipName + ' YT:' + ytPresent +' ' + srcUrl[0:30] + '... ' + clipStartTime + '-' + clipEndTime + '] (' + data.getName().toUri() + ')')
     else:
       self._events[idx]['translated'] = "publish"
 
@@ -339,7 +350,7 @@ class NaiveEDLParserAndPublisher(object):
     raise RuntimeError("Register failed for prefix", prefix.toUri())
   
   def onDataNotFound(self, prefix, interest, face, interestFilterId, filter):
-    print('Data not found for interest: ' + interest.getName().toUri())
+    # print('Data not found for interest: ' + interest.getName().toUri())
     return
 
   #############################
@@ -381,9 +392,10 @@ if __name__ == '__main__':
   naiveEDLParser = NaiveEDLParserAndPublisher()
 # <<<<<<< Updated upstream
   if naiveEDLParser._applyEDLAdjustment:
-    naiveEDLParser.loadEDLAdjustment('rough-cut.csv')
+    naiveEDLParser.loadEDLAdjustment('SFGS_16.02.02_batch-list.csv')#('rough-cut.csv')
   naiveEDLParser.getClipUrlOAuth()
-  naiveEDLParser.parse('ROUGH CUT_v02_ZS.edl')
+  # naiveEDLParser.parse('ROUGH CUT_v02_ZS.edl')
+  naiveEDLParser.parse('ROUGH CUT_v03a1-EDL.edl')
 # =======
   # if 0:
   #   naiveEDLParser.getClipUrlOAuth()
